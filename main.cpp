@@ -1,22 +1,27 @@
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_OFF
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/sinks/rotating_file_sink.h"
+#include "spdlog/async.h"
 
 using namespace std;
 
 void initSpdLog()
 {
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v (%@)");
+    console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v [%!()-%s:%#)]");
 
     // Create a file rotating logger with 1048b size max and 10 rotated files.
     auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>("logs/file_logger.txt", 1048, 10, true);
-    file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v (%@)");
+    file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v [%!()-%s:%#)]");
 
-    auto file_logger = std::make_shared<spdlog::logger>(spdlog::logger("logger", {console_sink, file_sink}));
+    std::vector<spdlog::sink_ptr> sinks {console_sink, file_sink};
+    spdlog::init_thread_pool(8192, 1);
+    auto async_logger = std::make_shared<spdlog::async_logger>("async_logger", sinks.begin(), sinks.end(), spdlog::thread_pool(),spdlog::async_overflow_policy::block);
+    async_logger->flush_on(spdlog::level::trace);
 
     // Set the default logger to file logger
-    spdlog::set_default_logger(file_logger);
+    spdlog::set_default_logger(async_logger);
 }
 
 void threadRun()
@@ -28,7 +33,7 @@ int main()
 {
     initSpdLog();
 
-    int nLoop = 1;
+    int nLoop = 2;
 
     for (int i = 0; i < nLoop; i++)
     {
@@ -39,9 +44,6 @@ int main()
 
     std::thread thread(threadRun);
     thread.join();
-
-    auto logger = spdlog::get("logger");
-    logger->sinks().at(1)->set_level(spdlog::level::off);
 
     for (int j = 0; j < nLoop; j++)
     {
